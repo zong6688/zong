@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>記憶翻牌遊戲</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Microsoft JhengHei", Arial, sans-serif;
+      background: linear-gradient(135deg, #dff6ff, #f9f7ff);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      background: white;
+      border-radius: 24px;
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.12);
+      padding: 24px;
+    }
+
+    h1 {
+      margin-top: 0;
+      text-align: center;
+      color: #2d3a4b;
+      font-size: 2.2rem;
+    }
+
+    .top-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .stat {
+      background: #f3f8ff;
+      border: 2px solid #d9e8ff;
+      border-radius: 14px;
+      padding: 10px 16px;
+      min-width: 140px;
+      text-align: center;
+      color: #24415c;
+      font-weight: bold;
+    }
+
+    .controls {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    button.control-btn {
+      background: #4f8cff;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 20px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    button.control-btn:hover {
+      background: #3d79ea;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    .card {
+      aspect-ratio: 1 / 1;
+      border: none;
+      border-radius: 18px;
+      cursor: pointer;
+      font-size: 2.4rem;
+      background: linear-gradient(135deg, #6d9cff, #8e7dff);
+      color: white;
+      box-shadow: 0 8px 16px rgba(87, 100, 255, 0.18);
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
+    }
+
+    .card.revealed {
+      background: #ffffff;
+      color: #222;
+      border: 2px solid #dbe5ff;
+    }
+
+    .card.matched {
+      background: linear-gradient(135deg, #8fe3a6, #5fd18b);
+      color: white;
+      cursor: default;
+      border: none;
+    }
+
+    .result {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 1.1rem;
+      color: #334;
+      min-height: 30px;
+      font-weight: bold;
+    }
+
+    .heatmap-wrap {
+      margin-top: 26px;
+    }
+
+    .heatmap-title {
+      font-weight: bold;
+      color: #2d3a4b;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .heatmap {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .heat-cell {
+      aspect-ratio: 1 / 1;
+      border-radius: 12px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      color: #222;
+      border: 1px solid #d8d8d8;
+      background: #f4f4f4;
+    }
+
+    .tips {
+      margin-top: 16px;
+      font-size: 0.95rem;
+      color: #555;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 700px) {
+      .board {
+        gap: 10px;
+      }
+
+      .card {
+        font-size: 1.9rem;
+        border-radius: 14px;
+      }
+
+      .stat {
+        min-width: 120px;
+        font-size: 0.95rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🃏 記憶翻牌遊戲</h1>
+
+    <div class="top-bar">
+      <div class="stat">時間：<span id="timer">0</span> 秒</div>
+      <div class="stat">翻錯：<span id="mistakes">0</span> 次</div>
+      <div class="stat">精準度：<span id="accuracy">100</span>%</div>
+    </div>
+
+    <div class="controls">
+      <button class="control-btn" id="restartBtn">重新開始</button>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <div class="result" id="resultText"></div>
+
+    <div class="heatmap-wrap">
+      <div class="heatmap-title">點擊熱力圖（每張牌被點了幾次）</div>
+      <div class="heatmap" id="heatmap"></div>
+    </div>
+
+    <div class="tips">
+      規則：點兩張牌，如果一樣就配對成功；不一樣會蓋回去。<br>
+      這個版本可以直接放到 GitHub Pages，用網址打開遊玩。
+    </div>
+  </div>
+
+  <script>
+    const symbols = ["🍎", "🍌", "🍇", "🍉", "🍒", "🥝", "🍍", "🍋"];
+    const boardSize = 4;
+    const totalCards = boardSize * boardSize;
+
+    let deck = [];
+    let firstCard = null;
+    let secondCard = null;
+    let lockBoard = false;
+
+    let matchedPairs = 0;
+    let mistakes = 0;
+    let attempts = 0;
+    let timer = 0;
+    let timerInterval = null;
+    let clickCounts = new Array(totalCards).fill(0);
+
+    const board = document.getElementById("board");
+    const heatmap = document.getElementById("heatmap");
+    const timerEl = document.getElementById("timer");
+    const mistakesEl = document.getElementById("mistakes");
+    const accuracyEl = document.getElementById("accuracy");
+    const resultText = document.getElementById("resultText");
+    const restartBtn = document.getElementById("restartBtn");
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function createDeck() {
+      const doubled = [...symbols, ...symbols];
+      deck = shuffle(doubled).map((symbol, index) => ({
+        id: index,
+        symbol,
+        revealed: false,
+        matched: false
+      }));
+    }
+
+    function startTimer() {
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timer++;
+        timerEl.textContent = timer;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+    }
+
+    function updateStats() {
+      mistakesEl.textContent = mistakes;
+      const accuracy = attempts === 0 ? 100 : Math.round((matchedPairs / attempts) * 100);
+      accuracyEl.textContent = accuracy;
+    }
+
+    function updateHeatmap() {
+      heatmap.innerHTML = "";
+      const maxClick = Math.max(...clickCounts, 1);
+
+      clickCounts.forEach((count) => {
+        const cell = document.createElement("div");
+        cell.className = "heat-cell";
+
+        const ratio = count / maxClick;
+        const red = 255;
+        const green = Math.round(245 - ratio * 120);
+        const blue = Math.round(245 - ratio * 180);
+
+        cell.style.backgroundColor = `rgb(${red}, ${green}, ${blue})`;
+        cell.textContent = count;
+        heatmap.appendChild(cell);
+      });
+    }
+
+    function renderBoard() {
+      board.innerHTML = "";
+
+      deck.forEach((card, index) => {
+        const btn = document.createElement("button");
+        btn.className = "card";
+
+        if (card.revealed || card.matched) {
+          btn.textContent = card.symbol;
+          btn.classList.add("revealed");
+        } else {
+          btn.textContent = "❓";
+        }
+
+        if (card.matched) {
+          btn.classList.add("matched");
+        }
+
+        btn.addEventListener("click", () => handleCardClick(index));
+        board.appendChild(btn);
+      });
+    }
+
+    function handleCardClick(index) {
+      const card = deck[index];
+
+      if (lockBoard || card.revealed || card.matched) return;
+
+      clickCounts[index]++;
+      updateHeatmap();
+
+      card.revealed = true;
+      renderBoard();
+
+      if (!firstCard) {
+        firstCard = index;
+        return;
+      }
+
+      secondCard = index;
+      lockBoard = true;
+      attempts++;
+
+      const first = deck[firstCard];
+      const second = deck[secondCard];
+
+      if (first.symbol === second.symbol) {
+        first.matched = true;
+        second.matched = true;
+        matchedPairs++;
+        firstCard = null;
+        secondCard = null;
+        lockBoard = false;
+        updateStats();
+        renderBoard();
+
+        if (matchedPairs === totalCards / 2) {
+          stopTimer();
+          resultText.textContent =
+            `🎉 恭喜過關！總時間：${timer} 秒，翻錯：${mistakes} 次，精準度：${accuracyEl.textContent}%`;
+        }
+      } else {
+        mistakes++;
+        updateStats();
+
+        setTimeout(() => {
+          deck[firstCard].revealed = false;
+          deck[secondCard].revealed = false;
+          firstCard = null;
+          secondCard = null;
+          lockBoard = false;
+          renderBoard();
+        }, 900);
+      }
+    }
+
+    function resetGame() {
+      matchedPairs = 0;
+      mistakes = 0;
+      attempts = 0;
+      timer = 0;
+      firstCard = null;
+      secondCard = null;
+      lockBoard = false;
+      clickCounts = new Array(totalCards).fill(0);
+
+      resultText.textContent = "";
+      timerEl.textContent = "0";
+      mistakesEl.textContent = "0";
+      accuracyEl.textContent = "100";
+
+      createDeck();
+      renderBoard();
+      updateHeatmap();
+      startTimer();
+    }
+
+    restartBtn.addEventListener("click", resetGame);
+
+    resetGame();
+  </script>
+</body>
+</html>

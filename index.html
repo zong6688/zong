@@ -1,523 +1,350 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-from dataclasses import dataclass
-from pathlib import Path
-import random
-import time
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>記憶翻牌遊戲</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: "Microsoft JhengHei", sans-serif;
+    }
 
-import numpy as np
-from PIL import Image, ImageDraw, ImageTk
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    body {
+      margin: 0;
+      background: #f4f7ff;
+      color: #1f2d3d;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 24px 16px 40px;
+    }
 
-# =========================
-# Matplotlib 中文設定（避免中文顯示成方塊）
-# =========================
-plt.rcParams["font.sans-serif"] = [
-    "Microsoft JhengHei",
-    "SimHei",
-    "Arial Unicode MS",
-    "DejaVu Sans"
-]
-plt.rcParams["axes.unicode_minus"] = False
+    h1 {
+      margin: 10px 0 20px;
+      font-size: 48px;
+      font-weight: 800;
+      color: #243b5a;
+      text-align: center;
+    }
 
-# =========================
-# 基本設定
-# =========================
-BOARD_SIZE = 4          # 改成 6 就是 6x6
-CARD_WIDTH = 120
-CARD_HEIGHT = 120
-CARD_SIZE = (CARD_WIDTH, CARD_HEIGHT)
-ASSETS_DIR = Path("assets")
-IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
-MISMATCH_DELAY_MS = 900
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
 
+    .title-icon {
+      font-size: 42px;
+      background: #e9e4ff;
+      border-radius: 12px;
+      padding: 10px 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
 
-@dataclass
-class Card:
-    """單張卡牌物件：記錄卡牌的圖片 ID 與目前狀態。"""
-    pair_id: int
-    front_image: Image.Image
-    is_revealed: bool = False
-    is_matched: bool = False
-    click_count: int = 0
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
 
+    .stat-box {
+      min-width: 180px;
+      padding: 14px 20px;
+      border: 2px solid #c9d9ff;
+      border-radius: 18px;
+      background: #f8fbff;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: #29466f;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+    }
 
-class GameManager:
-    """負責遊戲邏輯：洗牌、翻牌、配對判定、統計資料。"""
+    .controls {
+      margin-bottom: 26px;
+    }
 
-    def __init__(self, board_size: int, pair_images: list[Image.Image]):
-        self.board_size = board_size
-        self.num_pairs = (board_size * board_size) // 2
-        self.pair_images = pair_images
-        self.reset()
+    button {
+      border: none;
+      background: linear-gradient(135deg, #5b8def, #4d7df0);
+      color: white;
+      padding: 14px 28px;
+      border-radius: 16px;
+      font-size: 18px;
+      cursor: pointer;
+      box-shadow: 0 6px 16px rgba(77,125,240,0.25);
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
 
-    def reset(self):
-        self.cards = self._create_shuffled_cards()
-        self.first_pick = None
-        self.second_pick = None
-        self.lock_board = False
+    button:hover {
+      transform: translateY(-1px);
+      opacity: 0.95;
+    }
 
-        self.mismatch_count = 0          # 翻錯次數
-        self.successful_matches = 0      # 成功配對次數
-        self.total_pair_attempts = 0     # 總配對嘗試次數
+    .game-board {
+      display: grid;
+      grid-template-columns: repeat(4, 140px);
+      gap: 18px;
+      justify-content: center;
+      max-width: 700px;
+      width: 100%;
+    }
 
-        self.click_heatmap = np.zeros((self.board_size, self.board_size), dtype=int)
-        self.start_time = time.time()
+    .card {
+      width: 140px;
+      height: 140px;
+      perspective: 1000px;
+      cursor: pointer;
+    }
 
-    def _create_shuffled_cards(self):
-        deck = []
-        for pair_id, img in enumerate(self.pair_images, start=1):
-            deck.append(Card(pair_id=pair_id, front_image=img.copy()))
-            deck.append(Card(pair_id=pair_id, front_image=img.copy()))
+    .card-inner {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transition: transform 0.5s;
+      transform-style: preserve-3d;
+    }
 
-        random.shuffle(deck)
+    .card.flipped .card-inner,
+    .card.matched .card-inner {
+      transform: rotateY(180deg);
+    }
 
-        grid = []
-        idx = 0
-        for _ in range(self.board_size):
-            row = []
-            for _ in range(self.board_size):
-                row.append(deck[idx])
-                idx += 1
-            grid.append(row)
-        return grid
+    .card-face {
+      position: absolute;
+      inset: 0;
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 52px;
+      backface-visibility: hidden;
+      border: 2px solid #d6e0ff;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.06);
+      user-select: none;
+    }
 
-    def pick_card(self, row: int, col: int):
-        """處理玩家點牌，回傳動作結果給 GUI。"""
-        if self.lock_board:
-            return {"action": "locked"}
+    .card-front {
+      background: #ffffff;
+      transform: rotateY(180deg);
+    }
 
-        card = self.cards[row][col]
-        if card.is_revealed or card.is_matched:
-            return {"action": "ignored"}
+    .card-back {
+      background: linear-gradient(135deg, #7aa0ff, #6f7dff);
+      color: #ff4d67;
+      font-size: 56px;
+    }
 
-        card.is_revealed = True
-        card.click_count += 1
-        self.click_heatmap[row, col] += 1
+    .card.matched {
+      cursor: default;
+    }
 
-        if self.first_pick is None:
-            self.first_pick = (row, col)
-            return {"action": "first", "position": (row, col)}
+    .message {
+      margin-top: 24px;
+      font-size: 22px;
+      font-weight: 700;
+      color: #2e7d32;
+      min-height: 32px;
+      text-align: center;
+    }
 
-        self.second_pick = (row, col)
-        self.total_pair_attempts += 1
+    @media (max-width: 700px) {
+      h1 {
+        font-size: 34px;
+      }
 
-        r1, c1 = self.first_pick
-        first_card = self.cards[r1][c1]
+      .game-board {
+        grid-template-columns: repeat(4, 72px);
+        gap: 10px;
+      }
 
-        # 成功配對
-        if first_card.pair_id == card.pair_id:
-            first_card.is_matched = True
-            card.is_matched = True
-            self.successful_matches += 1
+      .card {
+        width: 72px;
+        height: 72px;
+      }
 
-            positions = [self.first_pick, self.second_pick]
-            self.first_pick = None
-            self.second_pick = None
+      .card-face {
+        font-size: 28px;
+      }
 
-            won = self.successful_matches == self.num_pairs
-            return {"action": "match", "positions": positions, "won": won}
+      .card-back {
+        font-size: 34px;
+      }
 
-        # 配對失敗
-        self.mismatch_count += 1
-        self.lock_board = True
-        return {
-            "action": "mismatch",
-            "positions": [self.first_pick, self.second_pick]
+      .stat-box {
+        min-width: 140px;
+        font-size: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="title-row">
+    <div class="title-icon">🃏</div>
+    <h1>記憶翻牌遊戲</h1>
+  </div>
+
+  <div class="stats">
+    <div class="stat-box" id="timeBox">時間：0 秒</div>
+    <div class="stat-box" id="mistakeBox">翻錯：0 次</div>
+    <div class="stat-box" id="accuracyBox">精準度：100%</div>
+  </div>
+
+  <div class="controls">
+    <button id="restartBtn">重新開始</button>
+  </div>
+
+  <div class="game-board" id="gameBoard"></div>
+
+  <div class="message" id="message"></div>
+
+  <script>
+    const symbols = ["🍎", "🍒", "🥝", "🍇", "🍍", "🍉", "🍋", "🍓"];
+    const board = document.getElementById("gameBoard");
+    const timeBox = document.getElementById("timeBox");
+    const mistakeBox = document.getElementById("mistakeBox");
+    const accuracyBox = document.getElementById("accuracyBox");
+    const messageBox = document.getElementById("message");
+    const restartBtn = document.getElementById("restartBtn");
+
+    let cards = [];
+    let firstCard = null;
+    let secondCard = null;
+    let lockBoard = false;
+    let matchedPairs = 0;
+    let mistakes = 0;
+    let attempts = 0;
+    let seconds = 0;
+    let timer = null;
+
+    function shuffle(array) {
+      const result = [...array];
+      for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+      }
+      return result;
+    }
+
+    function startTimer() {
+      clearInterval(timer);
+      timer = setInterval(() => {
+        seconds++;
+        timeBox.textContent = `時間：${seconds} 秒`;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timer);
+      timer = null;
+    }
+
+    function updateStats() {
+      mistakeBox.textContent = `翻錯：${mistakes} 次`;
+      const accuracy = attempts === 0 ? 100 : Math.round((matchedPairs / attempts) * 100);
+      accuracyBox.textContent = `精準度：${accuracy}%`;
+      timeBox.textContent = `時間：${seconds} 秒`;
+    }
+
+    function createBoard() {
+      board.innerHTML = "";
+      const deck = shuffle([...symbols, ...symbols]);
+
+      cards = deck.map((symbol, index) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.dataset.symbol = symbol;
+        card.dataset.index = index;
+
+        card.innerHTML = `
+          <div class="card-inner">
+            <div class="card-face card-front">${symbol}</div>
+            <div class="card-face card-back">?</div>
+          </div>
+        `;
+
+        card.addEventListener("click", () => handleCardClick(card));
+        board.appendChild(card);
+        return card;
+      });
+    }
+
+    function handleCardClick(card) {
+      if (lockBoard) return;
+      if (card.classList.contains("flipped")) return;
+      if (card.classList.contains("matched")) return;
+
+      card.classList.add("flipped");
+
+      if (firstCard === null) {
+        firstCard = card;
+        return;
+      }
+
+      if (card === firstCard) {
+        return;
+      }
+
+      secondCard = card;
+      attempts++;
+
+      const firstSymbol = firstCard.dataset.symbol;
+      const secondSymbol = secondCard.dataset.symbol;
+
+      if (firstSymbol === secondSymbol) {
+        firstCard.classList.add("matched");
+        secondCard.classList.add("matched");
+
+        matchedPairs++;
+        resetTurn();
+        updateStats();
+
+        if (matchedPairs === symbols.length) {
+          stopTimer();
+          messageBox.textContent = `🎉 恭喜完成！總時間 ${seconds} 秒，翻錯 ${mistakes} 次`;
         }
-
-    def hide_mismatched_cards(self):
-        """把翻錯的兩張牌蓋回去。"""
-        if self.first_pick is None or self.second_pick is None:
-            return
-
-        r1, c1 = self.first_pick
-        r2, c2 = self.second_pick
-
-        self.cards[r1][c1].is_revealed = False
-        self.cards[r2][c2].is_revealed = False
-
-        self.first_pick = None
-        self.second_pick = None
-        self.lock_board = False
-
-    @property
-    def elapsed_seconds(self):
-        return int(time.time() - self.start_time)
-
-    @property
-    def accuracy(self):
-        """精準度 = 成功配對次數 / 總配對嘗試次數"""
-        if self.total_pair_attempts == 0:
-            return 100.0
-        return (self.successful_matches / self.total_pair_attempts) * 100
-
-
-class MemoryMatchApp:
-    """GUI 主程式：顯示卡牌、處理點擊、顯示數據圖表。"""
-
-    def __init__(self, root: tk.Tk, board_size: int = BOARD_SIZE):
-        self.root = root
-        self.root.title("記憶翻牌大考驗 - Memory Match")
-        self.root.geometry("760x860")
-        self.root.minsize(700, 780)
-
-        if (board_size * board_size) % 2 != 0:
-            raise ValueError("棋盤大小必須是偶數張牌，例如 4x4 或 6x6。")
-
-        self.board_size = board_size
-        self.num_pairs = (board_size * board_size) // 2
-
-        self.front_images = self.load_pair_images(self.num_pairs)
-        self.back_image = self.create_back_image()
-
-        self.tk_back_image = ImageTk.PhotoImage(self.back_image)
-        self.tk_front_cache = {}
-
-        self.game = GameManager(self.board_size, self.front_images)
-        self.buttons = []
-
-        # 追蹤 after() 排程，避免舊任務干擾新局
-        self.mismatch_job = None
-        self.timer_job = None
-        self.game_finished = False
-
-        self.build_ui()
-        self.refresh_board()
-        self.update_timer()
-
-        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-
-    def build_ui(self):
-        top = ttk.Frame(self.root, padding=10)
-        top.pack(fill="x")
-
-        title = ttk.Label(
-            top,
-            text="🃏 記憶翻牌大考驗",
-            font=("Microsoft JhengHei", 20, "bold")
-        )
-        title.pack(anchor="center", pady=(0, 8))
-
-        info = ttk.Frame(top)
-        info.pack(fill="x")
-
-        self.time_var = tk.StringVar(value="時間：0 秒")
-        self.mismatch_var = tk.StringVar(value="翻錯次數：0")
-        self.accuracy_var = tk.StringVar(value="精準度：100.0%")
-
-        ttk.Label(info, textvariable=self.time_var, font=("Microsoft JhengHei", 12)).grid(row=0, column=0, padx=10, pady=5)
-        ttk.Label(info, textvariable=self.mismatch_var, font=("Microsoft JhengHei", 12)).grid(row=0, column=1, padx=10, pady=5)
-        ttk.Label(info, textvariable=self.accuracy_var, font=("Microsoft JhengHei", 12)).grid(row=0, column=2, padx=10, pady=5)
-
-        ttk.Button(info, text="重新開始", command=self.restart_game).grid(row=0, column=3, padx=12)
-
-        tip = ttk.Label(
-            top,
-            text="提示：把圖片放進 assets 資料夾，就會自動當作卡牌圖案；不夠時會自動產生彩色預設牌。",
-            foreground="#555555"
-        )
-        tip.pack(anchor="w", pady=(4, 8))
-
-        board_frame = ttk.Frame(self.root, padding=10)
-        board_frame.pack(expand=True)
-
-        self.buttons = []
-        for r in range(self.board_size):
-            row_buttons = []
-            for c in range(self.board_size):
-                btn = tk.Button(
-                    board_frame,
-                    image=self.tk_back_image,
-                    width=CARD_WIDTH,
-                    height=CARD_HEIGHT,
-                    relief="raised",
-                    bd=3,
-                    command=lambda rr=r, cc=c: self.on_card_click(rr, cc)
-                )
-                btn.grid(row=r, column=c, padx=6, pady=6)
-                row_buttons.append(btn)
-            self.buttons.append(row_buttons)
-
-    def restart_game(self):
-        # 如果上一局還有「翻錯後要蓋回去」的排程，先取消
-        if self.mismatch_job is not None:
-            self.root.after_cancel(self.mismatch_job)
-            self.mismatch_job = None
-
-        self.game_finished = False
-        self.game = GameManager(self.board_size, self.front_images)
-        self.refresh_board()
-        self.update_stats_labels()
-
-    def update_timer(self):
-        self.time_var.set(f"時間：{self.game.elapsed_seconds} 秒")
-        self.timer_job = self.root.after(1000, self.update_timer)
-
-    def update_stats_labels(self):
-        self.time_var.set(f"時間：{self.game.elapsed_seconds} 秒")
-        self.mismatch_var.set(f"翻錯次數：{self.game.mismatch_count}")
-        self.accuracy_var.set(f"精準度：{self.game.accuracy:.1f}%")
-
-    def on_card_click(self, row: int, col: int):
-        # 已過關就不再接受點擊
-        if self.game_finished:
-            return
-
-        result = self.game.pick_card(row, col)
-        action = result.get("action")
-
-        if action in {"ignored", "locked"}:
-            return
-
-        self.refresh_board()
-        self.update_stats_labels()
-
-        if action == "mismatch":
-            # 避免重複安排多個 mismatch 任務
-            if self.mismatch_job is None:
-                self.mismatch_job = self.root.after(MISMATCH_DELAY_MS, self.resolve_mismatch)
-
-        elif action == "match" and result.get("won"):
-            self.game_finished = True
-            self.game.lock_board = True   # 勝利前先鎖盤面，避免多點
-            self.root.after(300, self.show_victory)
-
-    def resolve_mismatch(self):
-        self.mismatch_job = None
-        self.game.hide_mismatched_cards()
-        self.refresh_board()
-        self.update_stats_labels()
-
-    def refresh_board(self):
-        for r in range(self.board_size):
-            for c in range(self.board_size):
-                card = self.game.cards[r][c]
-                btn = self.buttons[r][c]
-
-                if card.is_revealed or card.is_matched:
-                    tk_img = self.get_tk_front_image(card)
-                    btn.config(image=tk_img, state="normal")
-                    btn.image = tk_img
-                else:
-                    btn.config(image=self.tk_back_image, state="normal")
-                    btn.image = self.tk_back_image
-
-                if card.is_matched:
-                    btn.config(state="disabled", relief="sunken", disabledforeground="black")
-                else:
-                    btn.config(relief="raised")
-
-    def get_tk_front_image(self, card: Card):
-        key = (card.pair_id, id(card.front_image))
-        if key not in self.tk_front_cache:
-            self.tk_front_cache[key] = ImageTk.PhotoImage(card.front_image)
-        return self.tk_front_cache[key]
-
-    def show_victory(self):
-        self.update_stats_labels()
-        messagebox.showinfo(
-            "過關！",
-            f"恭喜完成配對！\n\n"
-            f"總時間：{self.game.elapsed_seconds} 秒\n"
-            f"翻錯次數：{self.game.mismatch_count}\n"
-            f"精準度：{self.game.accuracy:.1f}%"
-        )
-        self.show_stats_dashboard()
-
-    def show_stats_dashboard(self):
-        stats_win = tk.Toplevel(self.root)
-        stats_win.title("遊戲數據面板")
-        stats_win.geometry("980x560")
-
-        fig, axes = plt.subplots(1, 2, figsize=(11, 5))
-        fig.suptitle("記憶翻牌大考驗 - 數據分析", fontsize=16)
-
-        # 圓餅圖：成功配對 vs 翻錯次數
-        success = self.game.successful_matches
-        mistakes = self.game.mismatch_count
-        axes[0].pie(
-            [max(success, 0.0001), max(mistakes, 0.0001)],
-            labels=["配對成功", "翻錯次數"],
-            autopct="%1.1f%%",
-            startangle=90,
-            colors=["#66bb6a", "#ef5350"]
-        )
-        axes[0].set_title("精準度分析（成功 vs 翻錯）")
-
-        # 熱力圖：畫面哪個位置被點最多
-        heatmap = self.game.click_heatmap
-        im = axes[1].imshow(heatmap, cmap="YlOrRd")
-        axes[1].set_title("點擊熱力圖")
-        axes[1].set_xlabel("欄位")
-        axes[1].set_ylabel("列")
-        axes[1].set_xticks(range(self.board_size))
-        axes[1].set_yticks(range(self.board_size))
-
-        # 在每格上顯示點擊次數
-        for r in range(self.board_size):
-            for c in range(self.board_size):
-                axes[1].text(
-                    c, r, str(heatmap[r, c]),
-                    ha="center", va="center",
-                    color="black", fontsize=11
-                )
-
-        fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
-
-        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-
-        canvas = FigureCanvasTkAgg(fig, master=stats_win)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True)
-
-        summary = ttk.Label(
-            stats_win,
-            text=(
-                f"總時間：{self.game.elapsed_seconds} 秒    "
-                f"翻錯次數：{self.game.mismatch_count}    "
-                f"成功配對：{self.game.successful_matches}/{self.game.num_pairs}    "
-                f"精準度：{self.game.accuracy:.1f}%"
-            ),
-            font=("Microsoft JhengHei", 11)
-        )
-        summary.pack(pady=8)
-
-    def load_pair_images(self, num_pairs: int):
-        """
-        從 assets 資料夾讀取圖片，不夠時自動補預設牌。
-        """
-        ASSETS_DIR.mkdir(exist_ok=True)
-
-        image_files = []
-        for p in ASSETS_DIR.iterdir():
-            if p.is_file() and p.suffix.lower() in IMAGE_EXTS:
-                image_files.append(p)
-
-        image_files.sort()
-
-        images = []
-        for img_path in image_files[:num_pairs]:
-            try:
-                img = Image.open(img_path).convert("RGB")
-                img = self.fit_image_to_card(img)
-                images.append(img)
-            except Exception:
-                # 某張圖片讀不到就略過
-                continue
-
-        # 不夠的部分補預設圖
-        while len(images) < num_pairs:
-            images.append(self.create_default_front_image(len(images) + 1))
-
-        return images
-
-    def fit_image_to_card(self, img: Image.Image):
-        """
-        把圖片縮放裁切成卡片尺寸，避免變形。
-        """
-        target_w, target_h = CARD_SIZE
-        src_w, src_h = img.size
-
-        scale = max(target_w / src_w, target_h / src_h)
-        new_w = int(src_w * scale)
-        new_h = int(src_h * scale)
-
-        resized = img.resize((new_w, new_h), Image.LANCZOS)
-
-        left = (new_w - target_w) // 2
-        top = (new_h - target_h) // 2
-        right = left + target_w
-        bottom = top + target_h
-
-        cropped = resized.crop((left, top, right, bottom))
-        return cropped
-
-    def create_default_front_image(self, index: int):
-        """
-        產生預設的彩色牌面（當 assets 圖片不夠時使用）。
-        """
-        palette = [
-            "#FF8A80", "#FFD180", "#FFFF8D", "#CCFF90",
-            "#A7FFEB", "#80D8FF", "#82B1FF", "#B388FF",
-            "#F8BBD0", "#D7CCC8", "#C5E1A5", "#B2EBF2"
-        ]
-        bg = palette[(index - 1) % len(palette)]
-
-        img = Image.new("RGB", CARD_SIZE, bg)
-        draw = ImageDraw.Draw(img)
-
-        # 外框
-        draw.rounded_rectangle(
-            [(6, 6), (CARD_WIDTH - 6, CARD_HEIGHT - 6)],
-            radius=18,
-            outline="white",
-            width=4
-        )
-
-        # 中央標記
-        text = str(index)
-        bbox = draw.textbbox((0, 0), text)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        draw.text(
-            ((CARD_WIDTH - tw) / 2, (CARD_HEIGHT - th) / 2),
-            text,
-            fill="black"
-        )
-
-        return img
-
-    def create_back_image(self):
-        """
-        建立卡背圖片。
-        """
-        img = Image.new("RGB", CARD_SIZE, "#455A64")
-        draw = ImageDraw.Draw(img)
-
-        # 外框
-        draw.rounded_rectangle(
-            [(6, 6), (CARD_WIDTH - 6, CARD_HEIGHT - 6)],
-            radius=18,
-            outline="#CFD8DC",
-            width=4
-        )
-
-        # 簡單圖樣
-        for i in range(10, CARD_WIDTH, 20):
-            draw.line((i, 12, i, CARD_HEIGHT - 12), fill="#607D8B", width=1)
-        for j in range(12, CARD_HEIGHT, 20):
-            draw.line((12, j, CARD_WIDTH - 12, j), fill="#546E7A", width=1)
-
-        text = "?"
-        bbox = draw.textbbox((0, 0), text)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        draw.text(
-            ((CARD_WIDTH - tw) / 2, (CARD_HEIGHT - th) / 2 - 4),
-            text,
-            fill="white"
-        )
-        return img
-
-    def on_close(self):
-        if self.mismatch_job is not None:
-            try:
-                self.root.after_cancel(self.mismatch_job)
-            except Exception:
-                pass
-
-        if self.timer_job is not None:
-            try:
-                self.root.after_cancel(self.timer_job)
-            except Exception:
-                pass
-
-        self.root.destroy()
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = MemoryMatchApp(root, board_size=BOARD_SIZE)
-    root.mainloop()
+      } else {
+        mistakes++;
+        lockBoard = true;
+        updateStats();
+
+        setTimeout(() => {
+          firstCard.classList.remove("flipped");
+          secondCard.classList.remove("flipped");
+          resetTurn();
+        }, 900);
+      }
+    }
+
+    function resetTurn() {
+      firstCard = null;
+      secondCard = null;
+      lockBoard = false;
+    }
+
+    function resetGame() {
+      stopTimer();
+      firstCard = null;
+      secondCard = null;
+      lockBoard = false;
+      matchedPairs = 0;
+      mistakes = 0;
+      attempts = 0;
+      seconds = 0;
+      messageBox.textContent = "";
+      updateStats();
+      createBoard();
+      startTimer();
+    }
+
+    restartBtn.addEventListener("click", resetGame);
+
+    resetGame();
+  </script>
+</body>
+</html>

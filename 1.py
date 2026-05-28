@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import random
 import time
-from datetime import datetime
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageTk
@@ -179,9 +178,16 @@ class MemoryMatchApp:
         self.game = GameManager(self.board_size, self.front_images)
         self.buttons = []
 
+        # 追蹤 after() 排程，避免舊任務干擾新局
+        self.mismatch_job = None
+        self.timer_job = None
+        self.game_finished = False
+
         self.build_ui()
         self.refresh_board()
         self.update_timer()
+
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def build_ui(self):
         top = ttk.Frame(self.root, padding=10)
@@ -235,13 +241,19 @@ class MemoryMatchApp:
             self.buttons.append(row_buttons)
 
     def restart_game(self):
+        # 如果上一局還有「翻錯後要蓋回去」的排程，先取消
+        if self.mismatch_job is not None:
+            self.root.after_cancel(self.mismatch_job)
+            self.mismatch_job = None
+
+        self.game_finished = False
         self.game = GameManager(self.board_size, self.front_images)
         self.refresh_board()
         self.update_stats_labels()
 
     def update_timer(self):
         self.time_var.set(f"時間：{self.game.elapsed_seconds} 秒")
-        self.root.after(1000, self.update_timer)
+        self.timer_job = self.root.after(1000, self.update_timer)
 
     def update_stats_labels(self):
         self.time_var.set(f"時間：{self.game.elapsed_seconds} 秒")
@@ -249,6 +261,10 @@ class MemoryMatchApp:
         self.accuracy_var.set(f"精準度：{self.game.accuracy:.1f}%")
 
     def on_card_click(self, row: int, col: int):
+        # 已過關就不再接受點擊
+        if self.game_finished:
+            return
+
         result = self.game.pick_card(row, col)
         action = result.get("action")
 
@@ -259,11 +275,17 @@ class MemoryMatchApp:
         self.update_stats_labels()
 
         if action == "mismatch":
-            self.root.after(MISMATCH_DELAY_MS, self.resolve_mismatch)
+            # 避免重複安排多個 mismatch 任務
+            if self.mismatch_job is None:
+                self.mismatch_job = self.root.after(MISMATCH_DELAY_MS, self.resolve_mismatch)
+
         elif action == "match" and result.get("won"):
+            self.game_finished = True
+            self.game.lock_board = True   # 勝利前先鎖盤面，避免多點
             self.root.after(300, self.show_victory)
 
     def resolve_mismatch(self):
+        self.mismatch_job = None
         self.game.hide_mismatched_cards()
         self.refresh_board()
         self.update_stats_labels()
@@ -307,7 +329,7 @@ class MemoryMatchApp:
     def show_stats_dashboard(self):
         stats_win = tk.Toplevel(self.root)
         stats_win.title("遊戲數據面板")
-        stats_win.geometry("980x520")
+        stats_win.geometry("980x560")
 
         fig, axes = plt.subplots(1, 2, figsize=(11, 5))
         fig.suptitle("記憶翻牌大考驗 - 數據分析", fontsize=16)
@@ -331,3 +353,171 @@ class MemoryMatchApp:
         axes[1].set_xlabel("欄位")
         axes[1].set_ylabel("列")
         axes[1].set_xticks(range(self.board_size))
+        axes[1].set_yticks(range(self.board_size))
+
+        # 在每格上顯示點擊次數
+        for r in range(self.board_size):
+            for c in range(self.board_size):
+                axes[1].text(
+                    c, r, str(heatmap[r, c]),
+                    ha="center", va="center",
+                    color="black", fontsize=11
+                )
+
+        fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
+
+        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+        canvas = FigureCanvasTkAgg(fig, master=stats_win)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True)
+
+        summary = ttk.Label(
+            stats_win,
+            text=(
+                f"總時間：{self.game.elapsed_seconds} 秒    "
+                f"翻錯次數：{self.game.mismatch_count}    "
+                f"成功配對：{self.game.successful_matches}/{self.game.num_pairs}    "
+                f"精準度：{self.game.accuracy:.1f}%"
+            ),
+            font=("Microsoft JhengHei", 11)
+        )
+        summary.pack(pady=8)
+
+    def load_pair_images(self, num_pairs: int):
+        """
+        從 assets 資料夾讀取圖片，不夠時自動補預設牌。
+        """
+        ASSETS_DIR.mkdir(exist_ok=True)
+
+        image_files = []
+        for p in ASSETS_DIR.iterdir():
+            if p.is_file() and p.suffix.lower() in IMAGE_EXTS:
+                image_files.append(p)
+
+        image_files.sort()
+
+        images = []
+        for img_path in image_files[:num_pairs]:
+            try:
+                img = Image.open(img_path).convert("RGB")
+                img = self.fit_image_to_card(img)
+                images.append(img)
+            except Exception:
+                # 某張圖片讀不到就略過
+                continue
+
+        # 不夠的部分補預設圖
+        while len(images) < num_pairs:
+            images.append(self.create_default_front_image(len(images) + 1))
+
+        return images
+
+    def fit_image_to_card(self, img: Image.Image):
+        """
+        把圖片縮放裁切成卡片尺寸，避免變形。
+        """
+        target_w, target_h = CARD_SIZE
+        src_w, src_h = img.size
+
+        scale = max(target_w / src_w, target_h / src_h)
+        new_w = int(src_w * scale)
+        new_h = int(src_h * scale)
+
+        resized = img.resize((new_w, new_h), Image.LANCZOS)
+
+        left = (new_w - target_w) // 2
+        top = (new_h - target_h) // 2
+        right = left + target_w
+        bottom = top + target_h
+
+        cropped = resized.crop((left, top, right, bottom))
+        return cropped
+
+    def create_default_front_image(self, index: int):
+        """
+        產生預設的彩色牌面（當 assets 圖片不夠時使用）。
+        """
+        palette = [
+            "#FF8A80", "#FFD180", "#FFFF8D", "#CCFF90",
+            "#A7FFEB", "#80D8FF", "#82B1FF", "#B388FF",
+            "#F8BBD0", "#D7CCC8", "#C5E1A5", "#B2EBF2"
+        ]
+        bg = palette[(index - 1) % len(palette)]
+
+        img = Image.new("RGB", CARD_SIZE, bg)
+        draw = ImageDraw.Draw(img)
+
+        # 外框
+        draw.rounded_rectangle(
+            [(6, 6), (CARD_WIDTH - 6, CARD_HEIGHT - 6)],
+            radius=18,
+            outline="white",
+            width=4
+        )
+
+        # 中央標記
+        text = str(index)
+        bbox = draw.textbbox((0, 0), text)
+        tw = bbox[2] - bbox[0]
+        th = bbox[3] - bbox[1]
+        draw.text(
+            ((CARD_WIDTH - tw) / 2, (CARD_HEIGHT - th) / 2),
+            text,
+            fill="black"
+        )
+
+        return img
+
+    def create_back_image(self):
+        """
+        建立卡背圖片。
+        """
+        img = Image.new("RGB", CARD_SIZE, "#455A64")
+        draw = ImageDraw.Draw(img)
+
+        # 外框
+        draw.rounded_rectangle(
+            [(6, 6), (CARD_WIDTH - 6, CARD_HEIGHT - 6)],
+            radius=18,
+            outline="#CFD8DC",
+            width=4
+        )
+
+        # 簡單圖樣
+        for i in range(10, CARD_WIDTH, 20):
+            draw.line((i, 12, i, CARD_HEIGHT - 12), fill="#607D8B", width=1)
+        for j in range(12, CARD_HEIGHT, 20):
+            draw.line((12, j, CARD_WIDTH - 12, j), fill="#546E7A", width=1)
+
+        text = "?"
+        bbox = draw.textbbox((0, 0), text)
+        tw = bbox[2] - bbox[0]
+        th = bbox[3] - bbox[1]
+        draw.text(
+            ((CARD_WIDTH - tw) / 2, (CARD_HEIGHT - th) / 2 - 4),
+            text,
+            fill="white"
+        )
+        return img
+
+    def on_close(self):
+        if self.mismatch_job is not None:
+            try:
+                self.root.after_cancel(self.mismatch_job)
+            except Exception:
+                pass
+
+        if self.timer_job is not None:
+            try:
+                self.root.after_cancel(self.timer_job)
+            except Exception:
+                pass
+
+        self.root.destroy()
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = MemoryMatchApp(root, board_size=BOARD_SIZE)
+    root.mainloop()

@@ -23,7 +23,7 @@
 
     h1 {
       margin: 10px 0 20px;
-      font-size: 48px;
+      font-size: 46px;
       font-weight: 800;
       color: #243b5a;
       text-align: center;
@@ -37,11 +37,11 @@
     }
 
     .title-icon {
-      font-size: 42px;
+      font-size: 40px;
       background: #e9e4ff;
       border-radius: 12px;
       padding: 10px 14px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
 
     .stats {
@@ -62,7 +62,7 @@
       font-size: 18px;
       font-weight: 700;
       color: #29466f;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
     }
 
     .controls {
@@ -80,7 +80,7 @@
       border-radius: 16px;
       font-size: 18px;
       cursor: pointer;
-      box-shadow: 0 6px 16px rgba(77,125,240,0.25);
+      box-shadow: 0 6px 16px rgba(77, 125, 240, 0.25);
       transition: transform 0.15s ease, opacity 0.15s ease;
     }
 
@@ -89,9 +89,15 @@
       opacity: 0.95;
     }
 
+    button:disabled {
+      opacity: 0.72;
+      cursor: not-allowed;
+      transform: none;
+    }
+
     #startBtn {
       background: linear-gradient(135deg, #40c057, #2f9e44);
-      box-shadow: 0 6px 16px rgba(64,192,87,0.25);
+      box-shadow: 0 6px 16px rgba(64, 192, 87, 0.25);
     }
 
     #restartBtn {
@@ -112,18 +118,19 @@
       height: 140px;
       perspective: 1000px;
       cursor: pointer;
+      position: relative;
     }
 
     .card.disabled {
       cursor: not-allowed;
-      opacity: 0.85;
+      opacity: 0.88;
     }
 
     .card-inner {
       width: 100%;
       height: 100%;
       position: relative;
-      transition: transform 0.5s;
+      transition: transform 0.55s;
       transform-style: preserve-3d;
     }
 
@@ -136,29 +143,63 @@
       position: absolute;
       inset: 0;
       border-radius: 22px;
+      overflow: hidden;
+      backface-visibility: hidden;
+      border: 3px solid #d6e0ff;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06);
+      user-select: none;
+      background: #ffffff;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 52px;
-      backface-visibility: hidden;
-      border: 2px solid #d6e0ff;
-      box-shadow: 0 8px 18px rgba(0,0,0,0.06);
-      user-select: none;
     }
 
     .card-front {
-      background: #ffffff;
       transform: rotateY(180deg);
+      background: #fff;
     }
 
     .card-back {
       background: linear-gradient(135deg, #7aa0ff, #6f7dff);
-      color: #ff4d67;
-      font-size: 56px;
     }
 
-    .card.matched {
-      cursor: default;
+    .card-face img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .fallback-label {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 800;
+      color: #29466f;
+      background: linear-gradient(135deg, #eef4ff, #dfeaff);
+      text-align: center;
+      padding: 10px;
+    }
+
+    /* 配對成功後的不同顏色框線 */
+    .card.matched .card-face {
+      border-color: var(--match-color, #66bb6a);
+      box-shadow:
+        0 0 0 4px color-mix(in srgb, var(--match-color, #66bb6a) 18%, white),
+        0 10px 22px rgba(0, 0, 0, 0.10);
+    }
+
+    .card.matched::after {
+      content: "";
+      position: absolute;
+      inset: -4px;
+      border-radius: 26px;
+      border: 3px solid var(--match-color, #66bb6a);
+      pointer-events: none;
+      opacity: 0.96;
     }
 
     .message {
@@ -175,6 +216,66 @@
       color: #5f6f82;
       font-size: 16px;
       text-align: center;
+      max-width: 800px;
+    }
+
+    /* 彈窗 */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 1000;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    .modal-card {
+      width: min(92vw, 420px);
+      background: white;
+      border-radius: 24px;
+      padding: 28px 24px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+      text-align: center;
+    }
+
+    .modal-card h2 {
+      margin-top: 0;
+      margin-bottom: 12px;
+      font-size: 32px;
+      color: #1f3c68;
+    }
+
+    .modal-card p {
+      margin: 10px 0;
+      font-size: 18px;
+      color: #43556f;
+      line-height: 1.6;
+    }
+
+    .modal-actions {
+      margin-top: 20px;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .modal-actions button {
+      min-width: 130px;
+    }
+
+    .btn-play-again {
+      background: linear-gradient(135deg, #40c057, #2f9e44);
+    }
+
+    .btn-close {
+      background: linear-gradient(135deg, #5b8def, #4d7df0);
     }
 
     @media (max-width: 700px) {
@@ -192,14 +293,6 @@
         height: 72px;
       }
 
-      .card-face {
-        font-size: 28px;
-      }
-
-      .card-back {
-        font-size: 34px;
-      }
-
       .stat-box {
         min-width: 140px;
         font-size: 16px;
@@ -208,6 +301,14 @@
       button {
         font-size: 16px;
         padding: 12px 22px;
+      }
+
+      .modal-card h2 {
+        font-size: 26px;
+      }
+
+      .modal-card p {
+        font-size: 16px;
       }
     }
   </style>
@@ -231,10 +332,52 @@
 
   <div class="game-board" id="gameBoard"></div>
   <div class="message" id="message">請先按「開始遊戲」</div>
-  <div class="hint">開始前可以先看版面，但不能翻牌；按開始後才會計時。</div>
+  <div class="hint">開始前不會計時，也不能翻牌；按下開始後才會正式開始。配對成功後，每一組會用不同顏色外框標記。</div>
+
+  <div class="modal" id="winModal">
+    <div class="modal-card">
+      <h2>🎉 恭喜過關！</h2>
+      <p id="finalTime">總時間：0 秒</p>
+      <p id="finalMistakes">翻錯次數：0 次</p>
+      <p id="finalAccuracy">精準度：100%</p>
+      <div class="modal-actions">
+        <button class="btn-play-again" id="playAgainBtn">再玩一次</button>
+        <button class="btn-close" id="closeModalBtn">關閉</button>
+      </div>
+    </div>
+  </div>
 
   <script>
-    const symbols = ["🍎", "🍒", "🥝", "🍇", "🍍", "🍉", "🍋", "🍓"];
+    // =========================
+    // 牌面圖片（放在 index.html 同一層）
+    // =========================
+    const frontImages = [
+      "動物1.jpg",
+      "動物2.jpg",
+      "動物3.jpg",
+      "動物4.jpg",
+      "動物5.jpg",
+      "動物6.jpg",
+      "動物7.jpg",
+      "動物8.jpg"
+    ];
+
+    // =========================
+    // 背卡圖片（放在 index.html 同一層）
+    // =========================
+    const backImage = "pngtree-dot-my-eye-catching-yellow-promotional-public-number-picture-image_660070.jpg";
+
+    // 每組配對成功的框線顏色
+    const pairColors = [
+      "#ff6b6b",
+      "#ffa94d",
+      "#ffd43b",
+      "#69db7c",
+      "#4dabf7",
+      "#748ffc",
+      "#b197fc",
+      "#f783ac"
+    ];
 
     const board = document.getElementById("gameBoard");
     const timeBox = document.getElementById("timeBox");
@@ -243,6 +386,13 @@
     const messageBox = document.getElementById("message");
     const startBtn = document.getElementById("startBtn");
     const restartBtn = document.getElementById("restartBtn");
+
+    const winModal = document.getElementById("winModal");
+    const finalTime = document.getElementById("finalTime");
+    const finalMistakes = document.getElementById("finalMistakes");
+    const finalAccuracy = document.getElementById("finalAccuracy");
+    const playAgainBtn = document.getElementById("playAgainBtn");
+    const closeModalBtn = document.getElementById("closeModalBtn");
 
     let cards = [];
     let firstCard = null;
@@ -265,19 +415,19 @@
       return result;
     }
 
+    function stopTimer() {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+
     function startTimer() {
       stopTimer();
       timer = setInterval(() => {
         seconds++;
         timeBox.textContent = `時間：${seconds} 秒`;
       }, 1000);
-    }
-
-    function stopTimer() {
-      if (timer !== null) {
-        clearInterval(timer);
-        timer = null;
-      }
     }
 
     function updateStats() {
@@ -287,25 +437,87 @@
       timeBox.textContent = `時間：${seconds} 秒`;
     }
 
+    function openWinModal() {
+      const accuracy = attempts === 0 ? 100 : Math.round((matchedPairs / attempts) * 100);
+      finalTime.textContent = `總時間：${seconds} 秒`;
+      finalMistakes.textContent = `翻錯次數：${mistakes} 次`;
+      finalAccuracy.textContent = `精準度：${accuracy}%`;
+      winModal.classList.add("show");
+    }
+
+    function closeWinModal() {
+      winModal.classList.remove("show");
+    }
+
+    function createFallback(labelText) {
+      const fallback = document.createElement("div");
+      fallback.className = "fallback-label";
+      fallback.textContent = labelText;
+      return fallback;
+    }
+
+    function createImageElement(src, altText, fallbackText) {
+      const wrapper = document.createElement("div");
+      wrapper.style.width = "100%";
+      wrapper.style.height = "100%";
+
+      const img = document.createElement("img");
+      img.src = src;
+      img.alt = altText;
+
+      img.onerror = () => {
+        wrapper.innerHTML = "";
+        wrapper.appendChild(createFallback(fallbackText));
+      };
+
+      wrapper.appendChild(img);
+      return wrapper;
+    }
+
+    function buildDeck() {
+      const baseCards = frontImages.map((imgPath, pairId) => ({
+        pairId,
+        imgPath,
+        color: pairColors[pairId % pairColors.length],
+        label: `圖片 ${pairId + 1}`
+      }));
+
+      return shuffle([...baseCards, ...baseCards]);
+    }
+
     function createBoard() {
       board.innerHTML = "";
-      const deck = shuffle([...symbols, ...symbols]);
+      const deck = buildDeck();
 
-      cards = deck.map((symbol, index) => {
+      cards = deck.map((item, index) => {
         const card = document.createElement("div");
         card.className = "card disabled";
-        card.dataset.symbol = symbol;
+        card.dataset.pairId = item.pairId;
         card.dataset.index = index;
+        card.dataset.color = item.color;
 
-        card.innerHTML = `
-          <div class="card-inner">
-            <div class="card-face card-front">${symbol}</div>
-            <div class="card-face card-back">?</div>
-          </div>
-        `;
+        const inner = document.createElement("div");
+        inner.className = "card-inner";
+
+        const front = document.createElement("div");
+        front.className = "card-face card-front";
+        front.appendChild(
+          createImageElement(item.imgPath, `牌面 ${item.label}`, item.label)
+        );
+
+        const back = document.createElement("div");
+        back.className = "card-face card-back";
+        back.appendChild(
+          createImageElement(backImage, "卡背", "點我")
+        );
+
+        inner.appendChild(front);
+        inner.appendChild(back);
+        card.appendChild(inner);
 
         card.addEventListener("click", () => handleCardClick(card));
         board.appendChild(card);
+
         return card;
       });
     }
@@ -316,6 +528,12 @@
 
     function disableBoard() {
       cards.forEach(card => card.classList.add("disabled"));
+    }
+
+    function resetTurn() {
+      firstCard = null;
+      secondCard = null;
+      lockBoard = false;
     }
 
     function handleCardClick(card) {
@@ -339,24 +557,29 @@
       secondCard = card;
       attempts++;
 
-      const firstSymbol = firstCard.dataset.symbol;
-      const secondSymbol = secondCard.dataset.symbol;
+      const firstPairId = firstCard.dataset.pairId;
+      const secondPairId = secondCard.dataset.pairId;
 
-      if (firstSymbol === secondSymbol) {
+      if (firstPairId === secondPairId) {
+        const matchColor = firstCard.dataset.color || "#66bb6a";
+
         firstCard.classList.add("matched");
         secondCard.classList.add("matched");
-        matchedPairs++;
+        firstCard.style.setProperty("--match-color", matchColor);
+        secondCard.style.setProperty("--match-color", matchColor);
 
+        matchedPairs++;
         resetTurn();
         updateStats();
 
-        if (matchedPairs === symbols.length) {
+        if (matchedPairs === frontImages.length) {
           gameFinished = true;
           gameStarted = false;
           stopTimer();
           messageBox.textContent = `🎉 恭喜完成！總時間 ${seconds} 秒，翻錯 ${mistakes} 次`;
           startBtn.disabled = false;
           startBtn.textContent = "再玩一次";
+          openWinModal();
         }
       } else {
         mistakes++;
@@ -364,17 +587,11 @@
         updateStats();
 
         setTimeout(() => {
-          firstCard.classList.remove("flipped");
-          secondCard.classList.remove("flipped");
+          if (firstCard) firstCard.classList.remove("flipped");
+          if (secondCard) secondCard.classList.remove("flipped");
           resetTurn();
         }, 900);
       }
-    }
-
-    function resetTurn() {
-      firstCard = null;
-      secondCard = null;
-      lockBoard = false;
     }
 
     function resetGameState() {
@@ -389,6 +606,7 @@
       gameStarted = false;
       gameFinished = false;
       updateStats();
+      closeWinModal();
     }
 
     function prepareGame() {
@@ -403,32 +621,18 @@
     function startGame() {
       if (gameStarted) return;
 
-      // 如果是已完成後再次開始，重新洗牌
-      if (gameFinished || cards.length === 0) {
-        createBoard();
-      }
-
-      // 如果目前是剛重新開始後等待狀態，也重新洗牌一次
-      if (!gameFinished && !gameStarted) {
-        createBoard();
-      }
-
-      firstCard = null;
-      secondCard = null;
-      lockBoard = false;
-      matchedPairs = 0;
-      mistakes = 0;
-      attempts = 0;
-      seconds = 0;
-      gameFinished = false;
-      gameStarted = true;
-
-      updateStats();
+      resetGameState();
+      createBoard();
       enableBoard();
-      startTimer();
+
+      gameStarted = true;
+      gameFinished = false;
       messageBox.textContent = "遊戲開始！";
       startBtn.disabled = true;
       startBtn.textContent = "遊戲進行中";
+
+      updateStats();
+      startTimer();
     }
 
     function restartGame() {
@@ -437,8 +641,18 @@
 
     startBtn.addEventListener("click", startGame);
     restartBtn.addEventListener("click", restartGame);
+    playAgainBtn.addEventListener("click", () => {
+      closeWinModal();
+      prepareGame();
+    });
+    closeModalBtn.addEventListener("click", closeWinModal);
 
-    // 初始載入：只建立版面，不開始
+    winModal.addEventListener("click", (e) => {
+      if (e.target === winModal) {
+        closeWinModal();
+      }
+    });
+
     prepareGame();
   </script>
 </body>
